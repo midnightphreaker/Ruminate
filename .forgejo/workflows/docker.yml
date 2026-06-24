@@ -1,0 +1,64 @@
+name: Build and publish Docker image
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  docker:
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read VERSION
+        id: version
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "VERSION must be X.Y.Z, got: $version" >&2; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=https://git.phrk.org/mcp-servers/sequentialthinking" \
+            --label "org.opencontainers.image.version=${{ steps.version.outputs.version }}" \
+            -t "git.phrk.org/mcp-servers/sequentialthinking:${{ steps.version.outputs.version }}" \
+            -t "git.phrk.org/mcp-servers/sequentialthinking:latest" .
+
+      - name: Log in to Forgejo registry
+        env:
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+        run: |
+          test -n "$REGISTRY_USER"
+          test -n "$REGISTRY_PASSWORD"
+          printf '%s' "$REGISTRY_PASSWORD" | docker login git.phrk.org -u "$REGISTRY_USER" --password-stdin
+
+      - name: Push image
+        run: |
+          docker push "git.phrk.org/mcp-servers/sequentialthinking:${{ steps.version.outputs.version }}"
+          docker push "git.phrk.org/mcp-servers/sequentialthinking:latest"
+
+      - name: Bump VERSION
+        run: |
+          old="$(tr -d '[:space:]' < VERSION)"
+          major="${old%%.*}"
+          rest="${old#*.}"
+          minor="${rest%%.*}"
+          patch="${rest#*.}"
+          next="${major}.${minor}.$((patch + 1))"
+          printf '%s\n' "$next" > VERSION
+          git config user.name "forgejo-actions[bot]"
+          git config user.email "forgejo-actions[bot]@users.noreply.git.phrk.org"
+          git add VERSION
+          git commit -m "chore: bump version to $next [skip ci]"
+          git push origin "HEAD:$GITHUB_REF_NAME"
