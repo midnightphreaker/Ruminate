@@ -28,15 +28,7 @@ jobs:
           printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "VERSION must be X.Y.Z, got: $version" >&2; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Build image
-        run: |
-          docker build \
-            --label "org.opencontainers.image.source=https://git.phrk.org/mcp-servers/sequentialthinking" \
-            --label "org.opencontainers.image.version=${{ steps.version.outputs.version }}" \
-            -t "git.phrk.org/mcp-servers/sequentialthinking:${{ steps.version.outputs.version }}" \
-            -t "git.phrk.org/mcp-servers/sequentialthinking:latest" .
-
-      - name: Log in to Forgejo registry
+      - name: Build and push image
         env:
           REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
           REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
@@ -52,8 +44,11 @@ jobs:
             exit 1
           fi
 
-      - name: Push image
-        run: |
+          docker build \
+            --label "org.opencontainers.image.source=https://git.phrk.org/mcp-servers/sequentialthinking" \
+            --label "org.opencontainers.image.version=${{ steps.version.outputs.version }}" \
+            -t "git.phrk.org/mcp-servers/sequentialthinking:${{ steps.version.outputs.version }}" \
+            -t "git.phrk.org/mcp-servers/sequentialthinking:latest" .
           docker push "git.phrk.org/mcp-servers/sequentialthinking:${{ steps.version.outputs.version }}"
           docker push "git.phrk.org/mcp-servers/sequentialthinking:latest"
 
