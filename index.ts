@@ -18,14 +18,15 @@ const coercedBoolean = z.preprocess((val) => {
   return val;
 }, z.boolean());
 
-const server = new McpServer({
-  name: "sequential-thinking-server",
-  version: "0.2.0",
-});
+function createServer(): McpServer {
+  const server = new McpServer({
+    name: "sequential-thinking-server",
+    version: "0.2.0",
+  });
 
-const thinkingServer = new SequentialThinkingServer();
+  const thinkingServer = new SequentialThinkingServer();
 
-server.registerTool(
+  server.registerTool(
   "sequentialthinking",
   {
     title: "Sequential Thinking",
@@ -123,7 +124,10 @@ You should:
       structuredContent: parsedContent
     };
   }
-);
+  );
+
+  return server;
+}
 
 async function runServer() {
   const app = express();
@@ -147,7 +151,7 @@ async function runServer() {
         const closedSessionId = transport?.sessionId;
         if (closedSessionId) delete transports[closedSessionId];
       };
-      await server.connect(transport);
+      await createServer().connect(transport);
     }
 
     if (!transport) {
