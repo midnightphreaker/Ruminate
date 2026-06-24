@@ -44,13 +44,11 @@ jobs:
             exit 1
           fi
 
-          docker build \
+          docker build --push \
             --label "org.opencontainers.image.source=https://git.phrk.org/mcp-servers/sequentialthinking" \
             --label "org.opencontainers.image.version=${{ steps.version.outputs.version }}" \
             -t "git.phrk.org/mcp-servers/sequentialthinking:${{ steps.version.outputs.version }}" \
             -t "git.phrk.org/mcp-servers/sequentialthinking:latest" .
-          docker push "git.phrk.org/mcp-servers/sequentialthinking:${{ steps.version.outputs.version }}"
-          docker push "git.phrk.org/mcp-servers/sequentialthinking:latest"
 
       - name: Bump VERSION
         run: |
