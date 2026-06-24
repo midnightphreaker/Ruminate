@@ -41,4 +41,4 @@ This repository includes `.forgejo/workflows/docker.yml` and `VERSION`.
 
 On each push, the workflow builds and pushes `git.phrk.org/mcp-servers/sequentialthinking:<VERSION>` and `:latest`, then increments `VERSION` by `0.0.1` after a successful push.
 
-Required Forgejo secrets are `REGISTRY_USER` and `REGISTRY_PASSWORD`. The runner must have Docker available.
+Forgejo registry secrets `REGISTRY_USER` and `REGISTRY_PASSWORD` are optional when the Forgejo-provided `GITHUB_TOKEN` can publish packages. The runner uses `git.phrk.org/mcp-servers/runner-image-docker-cli:latest`, which includes the Docker CLI.

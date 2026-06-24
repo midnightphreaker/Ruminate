@@ -40,10 +40,17 @@ jobs:
         env:
           REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
           REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+          FORGEJO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORGEJO_ACTOR: ${{ github.actor }}
         run: |
-          test -n "$REGISTRY_USER"
-          test -n "$REGISTRY_PASSWORD"
-          printf '%s' "$REGISTRY_PASSWORD" | docker login git.phrk.org -u "$REGISTRY_USER" --password-stdin
+          if [ -n "${REGISTRY_USER:-}" ] && [ -n "${REGISTRY_PASSWORD:-}" ]; then
+            printf '%s' "$REGISTRY_PASSWORD" | docker login git.phrk.org -u "$REGISTRY_USER" --password-stdin
+          elif [ -n "${FORGEJO_TOKEN:-}" ]; then
+            printf '%s' "$FORGEJO_TOKEN" | docker login git.phrk.org -u "${FORGEJO_ACTOR:-forgejo-actions}" --password-stdin
+          else
+            echo "Set REGISTRY_USER and REGISTRY_PASSWORD secrets, or enable the Forgejo-provided GITHUB_TOKEN." >&2
+            exit 1
+          fi
 
       - name: Push image
         run: |
