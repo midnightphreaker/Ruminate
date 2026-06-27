@@ -1,9 +1,9 @@
 {
-  "name": "@modelcontextprotocol/server-sequential-thinking",
+  "name": "@modelcontextprotocol/ruminate",
   "version": "0.6.2",
-  "description": "MCP server for sequential thinking and problem solving",
+  "description": "MCP server for ruminating and problem solving",
   "license": "SEE LICENSE IN LICENSE",
-  "mcpName": "io.github.modelcontextprotocol/server-sequential-thinking",
+  "mcpName": "io.github.modelcontextprotocol/ruminate",
   "author": "Model Context Protocol a Series of LF Projects, LLC.",
   "homepage": "https://modelcontextprotocol.io",
   "bugs": "https://github.com/modelcontextprotocol/servers/issues",
@@ -13,7 +13,7 @@
   },
   "type": "module",
   "bin": {
-    "mcp-server-sequential-thinking": "dist/index.js"
+    "ruminate": "dist/index.js"
   },
   "files": [
     "dist"

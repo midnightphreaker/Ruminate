@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { SequentialThinkingServer, ThoughtData } from '../lib.js';
+import { Ruminate, ThoughtData } from '../lib.js';
 
 // Mock chalk to avoid ESM issues
 vi.mock('chalk', () => {
@@ -13,13 +13,13 @@ vi.mock('chalk', () => {
   };
 });
 
-describe('SequentialThinkingServer', () => {
-  let server: SequentialThinkingServer;
+describe('Ruminate', () => {
+  let server: Ruminate;
 
   beforeEach(() => {
     // Disable thought logging for tests
     process.env.DISABLE_THOUGHT_LOGGING = 'true';
-    server = new SequentialThinkingServer();
+    server = new Ruminate();
   });
 
   // Note: Input validation tests removed - validation now happens at the tool
@@ -252,12 +252,12 @@ describe('SequentialThinkingServer', () => {
   });
 
   describe('processThought - with logging enabled', () => {
-    let serverWithLogging: SequentialThinkingServer;
+    let serverWithLogging: Ruminate;
 
     beforeEach(() => {
       // Enable thought logging for these tests
       delete process.env.DISABLE_THOUGHT_LOGGING;
-      serverWithLogging = new SequentialThinkingServer();
+      serverWithLogging = new Ruminate();
     });
 
     afterEach(() => {

@@ -12,7 +12,7 @@ export interface ThoughtData {
   nextThoughtNeeded: boolean;
 }
 
-export class SequentialThinkingServer {
+export class Ruminate {
   private thoughtHistory: ThoughtData[] = [];
   private branches: Record<string, ThoughtData[]> = {};
   private disableThoughtLogging: boolean;

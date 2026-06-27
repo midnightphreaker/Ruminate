@@ -5,7 +5,7 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { SequentialThinkingServer } from './lib.js';
+import { Ruminate } from './lib.js';
 /** Safe boolean coercion that correctly handles string "false" */
 const coercedBoolean = z.preprocess((val) => {
     if (typeof val === "boolean")
@@ -19,12 +19,12 @@ const coercedBoolean = z.preprocess((val) => {
     return val;
 }, z.boolean());
 const server = new McpServer({
-    name: "sequential-thinking-server",
+    name: "ruminate",
     version: "0.2.0",
 });
-const thinkingServer = new SequentialThinkingServer();
-server.registerTool("sequentialthinking", {
-    title: "Sequential Thinking",
+const thinkingServer = new Ruminate();
+server.registerTool("ruminate", {
+    title: "Ruminate",
     description: `A detailed tool for dynamic and reflective problem-solving through thoughts.
 This tool helps analyze problems through a flexible thinking process that can adapt and evolve.
 Each thought can build on, question, or revise previous insights as understanding deepens.
@@ -59,7 +59,7 @@ Parameters explained:
   * Hypothesis generation
   * Hypothesis verification
 - nextThoughtNeeded: True if you need more thinking, even if at what seemed like the end
-- thoughtNumber: Current number in sequence (can go beyond initial total if needed)
+- thoughtNumber: Current number in rumination (can go beyond initial total if needed)
 - totalThoughts: Current estimate of thoughts needed (can be adjusted up/down)
 - isRevision: A boolean indicating if this thought revises previous thinking
 - revisesThought: If is_revision is true, which thought number is being reconsidered
@@ -160,7 +160,7 @@ async function runServer() {
     app.delete("/mcp", handleSession);
     const port = Number(process.env.PORT || 8000);
     app.listen(port, "0.0.0.0", () => {
-        console.error(`Sequential Thinking MCP Server running on streamable HTTP at /mcp port ${port}`);
+        console.error(`Ruminate running on streamable HTTP at /mcp port ${port}`);
     });
 }
 runServer().catch((error) => {

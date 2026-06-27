@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-export class SequentialThinkingServer {
+export class Ruminate {
     thoughtHistory = [];
     branches = {};
     disableThoughtLogging;
