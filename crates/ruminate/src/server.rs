@@ -241,6 +241,8 @@ fn prompt_text(text: &str) -> GetPromptResult {
 
 #[cfg(test)]
 mod tests {
+    use rmcp::handler::server::ServerHandler;
+
     use crate::models::GateKind;
 
     use super::*;
@@ -277,5 +279,40 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(gate.structured_content.unwrap()["ready"], false);
+    }
+
+    #[test]
+    fn exposes_expected_tools_and_prompts() {
+        let tools = RuminateServer::tool_router();
+        for name in [
+            "ruminate",
+            "ruminate_note",
+            "ruminate_checkpoint",
+            "ruminate_gate",
+            "ruminate_inspect",
+            "ruminate_reflect",
+        ] {
+            assert!(tools.has_route(name), "missing tool {name}");
+        }
+
+        let prompts = RuminateServer::prompt_router();
+        for name in [
+            "ruminate_plan",
+            "ruminate_debug",
+            "ruminate_review",
+            "ruminate_verify",
+            "ruminate_handoff",
+        ] {
+            assert!(prompts.has_route(name), "missing prompt {name}");
+        }
+    }
+
+    #[test]
+    fn server_declares_resources_prompts_and_tools() {
+        let info = RuminateServer::new().get_info();
+        assert!(info.capabilities.tools.is_some());
+        assert!(info.capabilities.prompts.is_some());
+        assert!(info.capabilities.resources.is_some());
+        assert_eq!(info.server_info.name, "ruminate");
     }
 }

@@ -184,12 +184,22 @@ mod tests {
     #[test]
     fn records_workflow_items() {
         let mut state = RuminateState::default();
-        let note = state.add_note(NoteInput {
-            kind: NoteKind::Decision,
-            text: "Use Rust".to_string(),
-            tags: vec!["migration".to_string()],
-        });
-        assert_eq!(note.kind, NoteKind::Decision);
+        for kind in [
+            NoteKind::Assumption,
+            NoteKind::Risk,
+            NoteKind::Decision,
+            NoteKind::Finding,
+            NoteKind::Question,
+            NoteKind::Blocker,
+            NoteKind::Comparison,
+        ] {
+            let note = state.add_note(NoteInput {
+                kind,
+                text: format!("{kind:?} text"),
+                tags: vec!["migration".to_string()],
+            });
+            assert_eq!(note.kind, kind);
+        }
 
         let checkpoint = state.add_checkpoint(CheckpointInput {
             summary: "Parity done".to_string(),
@@ -199,6 +209,8 @@ mod tests {
             tags: vec![],
         });
         assert_eq!(checkpoint.summary, "Parity done");
+        assert_eq!(state.summary().notes, 7);
+        assert_eq!(state.summary().checkpoints, 1);
     }
 
     #[test]
@@ -215,6 +227,24 @@ mod tests {
             tags: vec![],
         });
         assert!(!gate.ready);
+    }
+
+    #[test]
+    fn gate_non_passing_statuses_are_not_ready() {
+        for status in [CheckStatus::Pending, CheckStatus::Fail, CheckStatus::Warn] {
+            let mut state = RuminateState::default();
+            let gate = state.add_gate(GateInput {
+                gate: GateKind::Implementation,
+                checks: vec![GateCheck {
+                    id: format!("{status:?}"),
+                    label: "Status is not pass".to_string(),
+                    status,
+                    evidence: Some("evidence".to_string()),
+                }],
+                tags: vec![],
+            });
+            assert!(!gate.ready);
+        }
     }
 
     #[test]
