@@ -1,0 +1,9 @@
+[workspace]
+members = ["crates/ruminate"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://git.phrk.org/mcp-servers/ruminate"
+
