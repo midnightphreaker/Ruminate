@@ -240,4 +240,129 @@ mod tests {
             std::env::remove_var("RUMINATE_LLM_ENABLED");
         }
     }
+
+    #[cfg(feature = "reflect")]
+    async fn mock_provider(router: axum::Router) -> (String, tokio::task::JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handle = tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+        (format!("http://{addr}"), handle)
+    }
+
+    #[cfg(feature = "reflect")]
+    fn configure_reflect(base_url: &str, timeout_ms: &str) {
+        unsafe {
+            std::env::set_var("RUMINATE_LLM_ENABLED", "true");
+            std::env::set_var("RUMINATE_LLM_BASE_URL", base_url);
+            std::env::set_var("RUMINATE_LLM_API_KEY", "test-key");
+            std::env::set_var("RUMINATE_LLM_MODEL", "test-model");
+            std::env::set_var("RUMINATE_LLM_TIMEOUT_MS", timeout_ms);
+            std::env::remove_var("RUMINATE_LLM_MAX_INPUT_CHARS");
+        }
+    }
+
+    #[cfg(feature = "reflect")]
+    fn clear_reflect_env() {
+        unsafe {
+            std::env::remove_var("RUMINATE_LLM_ENABLED");
+            std::env::remove_var("RUMINATE_LLM_BASE_URL");
+            std::env::remove_var("RUMINATE_LLM_API_KEY");
+            std::env::remove_var("RUMINATE_LLM_MODEL");
+            std::env::remove_var("RUMINATE_LLM_TIMEOUT_MS");
+            std::env::remove_var("RUMINATE_LLM_MAX_INPUT_CHARS");
+        }
+    }
+
+    #[cfg(feature = "reflect")]
+    #[tokio::test]
+    async fn reflect_mocked_success() {
+        use axum::{Json, routing::post};
+        use serde_json::json;
+
+        let _guard = env_lock().await;
+        let (base_url, handle) = mock_provider(axum::Router::new().route(
+            "/chat/completions",
+            post(|| async {
+                Json(json!({
+                    "choices": [{
+                        "message": {
+                            "role": "assistant",
+                            "content": "summary"
+                        }
+                    }]
+                }))
+            }),
+        ))
+        .await;
+        configure_reflect(&base_url, "30000");
+
+        let output = reflect(ReflectInput {
+            purpose: ReflectPurpose::Summarize,
+            input: "summarize this".to_string(),
+        })
+        .await;
+
+        assert_eq!(output["status"], "ok");
+        assert_eq!(output["advisory"], true);
+        assert_eq!(output["model"], "test-model");
+        clear_reflect_env();
+        handle.abort();
+    }
+
+    #[cfg(feature = "reflect")]
+    #[tokio::test]
+    async fn reflect_mocked_timeout() {
+        use axum::routing::post;
+        use tokio::time::{Duration, sleep};
+
+        let _guard = env_lock().await;
+        let (base_url, handle) = mock_provider(axum::Router::new().route(
+            "/chat/completions",
+            post(|| async {
+                sleep(Duration::from_millis(200)).await;
+                "slow"
+            }),
+        ))
+        .await;
+        configure_reflect(&base_url, "10");
+
+        let output = reflect(ReflectInput {
+            purpose: ReflectPurpose::Critique,
+            input: "critique this".to_string(),
+        })
+        .await;
+
+        assert_eq!(output["status"], "timeout");
+        assert_eq!(output["advisory"], true);
+        clear_reflect_env();
+        handle.abort();
+    }
+
+    #[cfg(feature = "reflect")]
+    #[tokio::test]
+    async fn reflect_mocked_provider_error() {
+        use axum::{http::StatusCode, routing::post};
+
+        let _guard = env_lock().await;
+        let (base_url, handle) = mock_provider(axum::Router::new().route(
+            "/chat/completions",
+            post(|| async { StatusCode::INTERNAL_SERVER_ERROR }),
+        ))
+        .await;
+        configure_reflect(&base_url, "30000");
+
+        let output = reflect(ReflectInput {
+            purpose: ReflectPurpose::Compare,
+            input: "compare this".to_string(),
+        })
+        .await;
+
+        assert_eq!(output["status"], "provider_error");
+        assert_eq!(output["providerStatus"], 500);
+        assert_eq!(output["advisory"], true);
+        clear_reflect_env();
+        handle.abort();
+    }
 }
