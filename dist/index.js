@@ -4,8 +4,10 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
 import { randomUUID } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { Ruminate } from './lib.js';
+const SERVER_VERSION = "0.6.5";
 /** Safe boolean coercion that correctly handles string "false" */
 const coercedBoolean = z.preprocess((val) => {
     if (typeof val === "boolean")
@@ -18,14 +20,15 @@ const coercedBoolean = z.preprocess((val) => {
     }
     return val;
 }, z.boolean());
-const server = new McpServer({
-    name: "ruminate",
-    version: "0.2.0",
-});
-const thinkingServer = new Ruminate();
-server.registerTool("ruminate", {
-    title: "Ruminate",
-    description: `A detailed tool for dynamic and reflective problem-solving through thoughts.
+export function createServer() {
+    const server = new McpServer({
+        name: "ruminate",
+        version: SERVER_VERSION,
+    });
+    const thinkingServer = new Ruminate();
+    server.registerTool("ruminate", {
+        title: "Ruminate",
+        description: `A detailed tool for dynamic and reflective problem-solving through thoughts.
 This tool helps analyze problems through a flexible thinking process that can adapt and evolve.
 Each thought can build on, question, or revise previous insights as understanding deepens.
 
@@ -79,43 +82,45 @@ You should:
 9. Repeat the process until satisfied with the solution
 10. Provide a single, ideally correct answer as the final output
 11. Only set nextThoughtNeeded to false when truly done and a satisfactory answer is reached`,
-    inputSchema: {
-        thought: z.string().describe("Your current thinking step"),
-        nextThoughtNeeded: coercedBoolean.describe("Whether another thought step is needed"),
-        thoughtNumber: z.coerce.number().int().min(1).describe("Current thought number (numeric value, e.g., 1, 2, 3)"),
-        totalThoughts: z.coerce.number().int().min(1).describe("Estimated total thoughts needed (numeric value, e.g., 5, 10)"),
-        isRevision: coercedBoolean.optional().describe("Whether this revises previous thinking"),
-        revisesThought: z.coerce.number().int().min(1).optional().describe("Which thought is being reconsidered"),
-        branchFromThought: z.coerce.number().int().min(1).optional().describe("Branching point thought number"),
-        branchId: z.string().optional().describe("Branch identifier"),
-        needsMoreThoughts: coercedBoolean.optional().describe("If more thoughts are needed")
-    },
-    annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-    },
-    outputSchema: {
-        thoughtNumber: z.number(),
-        totalThoughts: z.number(),
-        nextThoughtNeeded: z.boolean(),
-        branches: z.array(z.string()),
-        thoughtHistoryLength: z.number()
-    },
-}, async (args) => {
-    const result = thinkingServer.processThought(args);
-    if (result.isError) {
-        return result;
-    }
-    // Parse the JSON response to get structured content
-    const parsedContent = JSON.parse(result.content[0].text);
-    return {
-        content: result.content,
-        structuredContent: parsedContent
-    };
-});
-async function runServer() {
+        inputSchema: {
+            thought: z.string().describe("Your current thinking step"),
+            nextThoughtNeeded: coercedBoolean.describe("Whether another thought step is needed"),
+            thoughtNumber: z.coerce.number().int().min(1).describe("Current thought number (numeric value, e.g., 1, 2, 3)"),
+            totalThoughts: z.coerce.number().int().min(1).describe("Estimated total thoughts needed (numeric value, e.g., 5, 10)"),
+            isRevision: coercedBoolean.optional().describe("Whether this revises previous thinking"),
+            revisesThought: z.coerce.number().int().min(1).optional().describe("Which thought is being reconsidered"),
+            branchFromThought: z.coerce.number().int().min(1).optional().describe("Branching point thought number"),
+            branchId: z.string().optional().describe("Branch identifier"),
+            needsMoreThoughts: coercedBoolean.optional().describe("If more thoughts are needed")
+        },
+        annotations: {
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
+        },
+        outputSchema: {
+            thoughtNumber: z.number(),
+            totalThoughts: z.number(),
+            nextThoughtNeeded: z.boolean(),
+            branches: z.array(z.string()),
+            thoughtHistoryLength: z.number()
+        },
+    }, async (args) => {
+        const result = thinkingServer.processThought(args);
+        if (result.isError) {
+            return result;
+        }
+        // Parse the JSON response to get structured content
+        const parsedContent = JSON.parse(result.content[0].text);
+        return {
+            content: result.content,
+            structuredContent: parsedContent
+        };
+    });
+    return server;
+}
+export function createApp() {
     const app = express();
     app.use(express.json({ limit: "16mb" }));
     const transports = {};
@@ -134,7 +139,7 @@ async function runServer() {
                 if (closedSessionId)
                     delete transports[closedSessionId];
             };
-            await server.connect(transport);
+            await createServer().connect(transport);
         }
         if (!transport) {
             res.status(400).json({
@@ -155,15 +160,27 @@ async function runServer() {
         }
         await transport.handleRequest(req, res);
     };
+    app.get("/healthz", (_req, res) => {
+        res.json({
+            status: "ok",
+            service: "ruminate",
+        });
+    });
     app.post("/mcp", handlePost);
     app.get("/mcp", handleSession);
     app.delete("/mcp", handleSession);
+    return app;
+}
+export async function runServer() {
+    const app = createApp();
     const port = Number(process.env.PORT || 8000);
     app.listen(port, "0.0.0.0", () => {
         console.error(`Ruminate running on streamable HTTP at /mcp port ${port}`);
     });
 }
-runServer().catch((error) => {
-    console.error("Fatal error running server:", error);
-    process.exit(1);
-});
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+    runServer().catch((error) => {
+        console.error("Fatal error running server:", error);
+        process.exit(1);
+    });
+}

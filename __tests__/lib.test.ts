@@ -256,7 +256,7 @@ describe('Ruminate', () => {
 
     beforeEach(() => {
       // Enable thought logging for these tests
-      delete process.env.DISABLE_THOUGHT_LOGGING;
+      process.env.DISABLE_THOUGHT_LOGGING = 'false';
       serverWithLogging = new Ruminate();
     });
 

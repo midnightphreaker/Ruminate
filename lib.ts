@@ -18,7 +18,7 @@ export class Ruminate {
   private disableThoughtLogging: boolean;
 
   constructor() {
-    this.disableThoughtLogging = (process.env.DISABLE_THOUGHT_LOGGING || "").toLowerCase() === "true";
+    this.disableThoughtLogging = (process.env.DISABLE_THOUGHT_LOGGING || "true").toLowerCase() === "true";
   }
 
   private formatThought(thoughtData: ThoughtData): string {

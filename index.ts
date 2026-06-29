@@ -5,8 +5,11 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import express, { type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { Ruminate } from './lib.js';
+
+const SERVER_VERSION = "0.6.5";
 
 /** Safe boolean coercion that correctly handles string "false" */
 const coercedBoolean = z.preprocess((val) => {
@@ -18,10 +21,10 @@ const coercedBoolean = z.preprocess((val) => {
   return val;
 }, z.boolean());
 
-function createServer(): McpServer {
+export function createServer(): McpServer {
   const server = new McpServer({
     name: "ruminate",
-    version: "0.2.0",
+    version: SERVER_VERSION,
   });
 
   const thinkingServer = new Ruminate();
@@ -129,7 +132,7 @@ You should:
   return server;
 }
 
-async function runServer() {
+export function createApp() {
   const app = express();
   app.use(express.json({ limit: "16mb" }));
 
@@ -176,17 +179,30 @@ async function runServer() {
     await transport.handleRequest(req, res);
   };
 
+  app.get("/healthz", (_req: Request, res: Response) => {
+    res.json({
+      status: "ok",
+      service: "ruminate",
+    });
+  });
   app.post("/mcp", handlePost);
   app.get("/mcp", handleSession);
   app.delete("/mcp", handleSession);
 
+  return app;
+}
+
+export async function runServer() {
+  const app = createApp();
   const port = Number(process.env.PORT || 8000);
   app.listen(port, "0.0.0.0", () => {
     console.error(`Ruminate running on streamable HTTP at /mcp port ${port}`);
   });
 }
 
-runServer().catch((error) => {
-  console.error("Fatal error running server:", error);
-  process.exit(1);
-});
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  runServer().catch((error) => {
+    console.error("Fatal error running server:", error);
+    process.exit(1);
+  });
+}

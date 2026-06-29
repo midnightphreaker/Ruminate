@@ -45,10 +45,10 @@ jobs:
           fi
 
           docker build --push \
-            --label "org.opencontainers.image.source=https://git.phrk.org/mcp-servers/sequentialthinking" \
+            --label "org.opencontainers.image.source=https://git.phrk.org/mcp-servers/ruminate" \
             --label "org.opencontainers.image.version=${{ steps.version.outputs.version }}" \
-            -t "git.phrk.org/mcp-servers/sequentialthinking:${{ steps.version.outputs.version }}" \
-            -t "git.phrk.org/mcp-servers/sequentialthinking:latest" .
+            -t "git.phrk.org/mcp-servers/ruminate:${{ steps.version.outputs.version }}" \
+            -t "git.phrk.org/mcp-servers/ruminate:latest" .
 
       - name: Bump VERSION
         run: |

@@ -4,7 +4,7 @@ export class Ruminate {
     branches = {};
     disableThoughtLogging;
     constructor() {
-        this.disableThoughtLogging = (process.env.DISABLE_THOUGHT_LOGGING || "").toLowerCase() === "true";
+        this.disableThoughtLogging = (process.env.DISABLE_THOUGHT_LOGGING || "true").toLowerCase() === "true";
     }
     formatThought(thoughtData) {
         const { thoughtNumber, totalThoughts, thought, isRevision, revisesThought, branchFromThought, branchId } = thoughtData;
