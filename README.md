@@ -1,6 +1,6 @@
 # Ruminate
 
-Docker-only Streamable HTTP deployment for the Ruminate server.
+Docker-first Rust Streamable HTTP MCP server for session-local reflective workflow state.
 
 Repository: `https://git.phrk.org/mcp-servers/ruminate`
 Image: `git.phrk.org/mcp-servers/ruminate:latest`
@@ -15,7 +15,15 @@ docker run --rm \
   git.phrk.org/mcp-servers/ruminate:latest
 ```
 
-There is no persistent user data for this service.
+There is no persistent user data for this service. Timeline, notes, checkpoints, and gates live only in the current MCP session.
+
+## Docker Smoke Test
+
+```bash
+docker build -t ruminate:test .
+docker run --rm -p 8000:8000 ruminate:test
+curl http://127.0.0.1:8000/healthz
+```
 
 ## Runtime Options
 

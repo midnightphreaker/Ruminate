@@ -1,21 +1,21 @@
-FROM node:22-alpine AS build
+FROM rust:1.95-bookworm AS build
 
-WORKDIR /app
-COPY package*.json ./
-RUN npm install --ignore-scripts
-COPY tsconfig.json ./
-COPY index.ts lib.ts ./
-RUN npm run build && npm prune --omit=dev
+WORKDIR /src
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+RUN cargo build --release -p ruminate
 
-FROM node:22-alpine
+FROM debian:bookworm-slim
 
-ENV NODE_ENV=production
 ENV PORT=8000
 WORKDIR /app
-RUN addgroup -g 10001 -S app && adduser -S app -u 10001 -G app
-COPY --from=build --chown=app:app /app/package*.json ./
-COPY --from=build --chown=app:app /app/node_modules ./node_modules
-COPY --from=build --chown=app:app /app/dist ./dist
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates; \
+    rm -rf /var/lib/apt/lists/*; \
+    groupadd --system --gid 10001 app; \
+    useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app
+COPY --from=build --chown=app:app /src/target/release/ruminate /app/ruminate
 USER app
 EXPOSE 8000
-CMD ["node", "dist/index.js"]
+CMD ["/app/ruminate"]

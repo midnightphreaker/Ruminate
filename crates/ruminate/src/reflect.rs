@@ -91,10 +91,7 @@ async fn reflect_enabled(input: ReflectInput, config: ReflectConfig) -> Value {
     let base_url = config.base_url.expect("checked above");
     let api_key = std::env::var("RUMINATE_LLM_API_KEY").expect("checked above");
     let model = config.model.expect("checked above");
-    let prompt = format!(
-        "Purpose: {:?}\n\nInput:\n{}",
-        input.purpose, input.input
-    );
+    let prompt = format!("Purpose: {:?}\n\nInput:\n{}", input.purpose, input.input);
 
     let response = client
         .post(base_url.trim_end_matches('/').to_string() + "/chat/completions")
@@ -178,14 +175,24 @@ fn env_bool(name: &str, default: bool) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::OnceLock;
+    use tokio::sync::{Mutex, MutexGuard};
+
     use crate::models::ReflectPurpose;
 
     use super::*;
 
+    async fn env_lock() -> MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(())).lock().await
+    }
+
     #[tokio::test]
     async fn reflect_disabled_by_default() {
+        let _guard = env_lock().await;
         unsafe {
             std::env::remove_var("RUMINATE_LLM_ENABLED");
+            std::env::remove_var("RUMINATE_LLM_MAX_INPUT_CHARS");
         }
         let output = reflect(ReflectInput {
             purpose: ReflectPurpose::Summarize,
@@ -198,6 +205,7 @@ mod tests {
 
     #[tokio::test]
     async fn reflect_rejects_large_input() {
+        let _guard = env_lock().await;
         unsafe {
             std::env::set_var("RUMINATE_LLM_MAX_INPUT_CHARS", "3");
         }
@@ -214,8 +222,10 @@ mod tests {
 
     #[tokio::test]
     async fn reflect_reports_missing_config() {
+        let _guard = env_lock().await;
         unsafe {
             std::env::set_var("RUMINATE_LLM_ENABLED", "true");
+            std::env::remove_var("RUMINATE_LLM_MAX_INPUT_CHARS");
             std::env::remove_var("RUMINATE_LLM_BASE_URL");
             std::env::remove_var("RUMINATE_LLM_API_KEY");
             std::env::remove_var("RUMINATE_LLM_MODEL");

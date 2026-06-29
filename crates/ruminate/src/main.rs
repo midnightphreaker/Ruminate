@@ -15,4 +15,3 @@ async fn main() -> anyhow::Result<()> {
 
     http::serve().await
 }
-

@@ -67,10 +67,9 @@ impl RuminateState {
 
     pub fn add_gate(&mut self, input: GateInput) -> GateRecord {
         let ready = !input.checks.is_empty()
-            && input
-                .checks
-                .iter()
-                .all(|check| check.status == CheckStatus::Pass && has_evidence(check.evidence.as_deref()));
+            && input.checks.iter().all(|check| {
+                check.status == CheckStatus::Pass && has_evidence(check.evidence.as_deref())
+            });
         let record = GateRecord {
             id: Uuid::new_v4().to_string(),
             gate: input.gate,
@@ -82,16 +81,15 @@ impl RuminateState {
         record
     }
 
-    pub fn inspect<T>(&self, view: InspectView, limit: Option<usize>) -> serde_json::Value
-    where
-        T: ?Sized,
-    {
+    pub fn inspect(&self, view: InspectView, limit: Option<usize>) -> serde_json::Value {
         match view {
             InspectView::Timeline => limited_value(&self.timeline, limit),
             InspectView::Notes => limited_value(&self.notes, limit),
             InspectView::Checkpoints => limited_value(&self.checkpoints, limit),
             InspectView::Gates => limited_value(&self.gates, limit),
-            InspectView::Summary => serde_json::to_value(self.summary()).expect("summary serializes"),
+            InspectView::Summary => {
+                serde_json::to_value(self.summary()).expect("summary serializes")
+            }
         }
     }
 
@@ -162,8 +160,14 @@ mod tests {
     #[test]
     fn ruminate_tracks_history() {
         let mut state = RuminateState::default();
-        assert_eq!(state.process_thought(thought("one")).thought_history_length, 1);
-        assert_eq!(state.process_thought(thought("two")).thought_history_length, 2);
+        assert_eq!(
+            state.process_thought(thought("one")).thought_history_length,
+            1
+        );
+        assert_eq!(
+            state.process_thought(thought("two")).thought_history_length,
+            2
+        );
     }
 
     #[test]
@@ -251,18 +255,38 @@ mod tests {
             tags: vec![],
         });
 
-        assert_eq!(state.inspect::<()>(InspectView::Timeline, None).as_array().unwrap().len(), 1);
-        assert_eq!(state.inspect::<()>(InspectView::Notes, None).as_array().unwrap().len(), 1);
         assert_eq!(
             state
-                .inspect::<()>(InspectView::Checkpoints, None)
+                .inspect(InspectView::Timeline, None)
                 .as_array()
                 .unwrap()
                 .len(),
             1
         );
-        assert_eq!(state.inspect::<()>(InspectView::Gates, None).as_array().unwrap().len(), 1);
-        assert_eq!(state.inspect::<()>(InspectView::Summary, None)["notes"], 1);
+        assert_eq!(
+            state
+                .inspect(InspectView::Notes, None)
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            state
+                .inspect(InspectView::Checkpoints, None)
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            state
+                .inspect(InspectView::Gates, None)
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(state.inspect(InspectView::Summary, None)["notes"], 1);
     }
 }
-

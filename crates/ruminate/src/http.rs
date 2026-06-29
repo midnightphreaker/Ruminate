@@ -73,4 +73,3 @@ mod tests {
         assert_eq!(json, json!({ "status": "ok", "service": "ruminate" }));
     }
 }
-

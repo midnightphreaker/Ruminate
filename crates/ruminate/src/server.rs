@@ -16,9 +16,7 @@ use serde_json::json;
 use tokio::sync::Mutex;
 
 use crate::{
-    models::{
-        CheckpointInput, GateInput, InspectInput, NoteInput, ReflectInput, ThoughtInput,
-    },
+    models::{CheckpointInput, GateInput, InspectInput, NoteInput, ReflectInput, ThoughtInput},
     reflect,
     state::RuminateState,
 };
@@ -52,7 +50,9 @@ impl RuminateServer {
         Ok(json_result(output))
     }
 
-    #[tool(description = "Record an assumption, risk, decision, finding, question, blocker, or comparison note.")]
+    #[tool(
+        description = "Record an assumption, risk, decision, finding, question, blocker, or comparison note."
+    )]
     pub async fn ruminate_note(
         &self,
         Parameters(input): Parameters<NoteInput>,
@@ -61,7 +61,9 @@ impl RuminateServer {
         Ok(json_result(output))
     }
 
-    #[tool(description = "Record a workflow checkpoint with summary, open questions, next steps, status, and tags.")]
+    #[tool(
+        description = "Record a workflow checkpoint with summary, open questions, next steps, status, and tags."
+    )]
     pub async fn ruminate_checkpoint(
         &self,
         Parameters(input): Parameters<CheckpointInput>,
@@ -70,7 +72,9 @@ impl RuminateServer {
         Ok(json_result(output))
     }
 
-    #[tool(description = "Record a plan, implementation, verification, or release gate and calculate readiness.")]
+    #[tool(
+        description = "Record a plan, implementation, verification, or release gate and calculate readiness."
+    )]
     pub async fn ruminate_gate(
         &self,
         Parameters(input): Parameters<GateInput>,
@@ -79,21 +83,31 @@ impl RuminateServer {
         Ok(json_result(output))
     }
 
-    #[tool(description = "Inspect timeline, notes, checkpoints, gates, or a compact session summary.")]
+    #[tool(
+        description = "Inspect timeline, notes, checkpoints, gates, or a compact session summary."
+    )]
     pub async fn ruminate_inspect(
         &self,
         Parameters(input): Parameters<InspectInput>,
     ) -> Result<CallToolResult, McpError> {
         let state = self.state.lock().await;
-        Ok(json_value_result(state.inspect::<()>(input.view, input.limit)))
+        Ok(json_value_result(state.inspect(input.view, input.limit)))
     }
 
-    #[tool(description = "Optionally ask a configured LLM for advisory reflection. Disabled by default and never called implicitly.")]
+    #[tool(
+        description = "Optionally ask a configured LLM for advisory reflection. Disabled by default and never called implicitly."
+    )]
     pub async fn ruminate_reflect(
         &self,
         Parameters(input): Parameters<ReflectInput>,
     ) -> Result<CallToolResult, McpError> {
         Ok(json_value_result(reflect::reflect(input).await))
+    }
+}
+
+impl Default for RuminateServer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
