@@ -1,7 +1,9 @@
 use axum::Router;
 use rmcp::{
     ClientHandler, ServiceExt,
-    model::{CallToolRequestParams, ClientRequest, Request, ServerResult},
+    model::{
+        CallToolRequestParams, ClientRequest, ReadResourceRequestParams, Request, ServerResult,
+    },
     transport::StreamableHttpClientTransport,
 };
 use serde_json::json;
@@ -20,6 +22,23 @@ async fn spawn_app() -> (String, tokio::task::JoinHandle<()>) {
         axum::serve(listener, app).await.unwrap();
     });
     (format!("http://{addr}/mcp"), handle)
+}
+
+async fn read_resource(
+    client: &rmcp::service::RunningService<rmcp::RoleClient, TestClient>,
+    uri: &str,
+) -> serde_json::Value {
+    let response = client
+        .send_request(ClientRequest::ReadResourceRequest(Request::new(
+            ReadResourceRequestParams::new(uri),
+        )))
+        .await
+        .unwrap();
+
+    let ServerResult::ReadResourceResult(result) = response else {
+        panic!("unexpected response: {response:?}");
+    };
+    serde_json::to_value(result.contents).unwrap()
 }
 
 async fn connect(url: &str) -> rmcp::service::RunningService<rmcp::RoleClient, TestClient> {
@@ -79,6 +98,20 @@ async fn mcp_sessions_are_isolated() {
     assert_eq!(second_result["thoughtHistoryLength"], 1);
     first.cancel().await.unwrap();
     second.cancel().await.unwrap();
+    handle.abort();
+}
+
+#[tokio::test]
+async fn resources_are_returned_as_json() {
+    let (url, handle) = spawn_app().await;
+    let client = connect(&url).await;
+
+    let contents = read_resource(&client, "ruminate://session/timeline").await;
+
+    assert_eq!(contents[0]["uri"], "ruminate://session/timeline");
+    assert_eq!(contents[0]["mimeType"], "application/json");
+    assert_eq!(contents[0]["text"], "[]");
+    client.cancel().await.unwrap();
     handle.abort();
 }
 

@@ -40,6 +40,8 @@ curl http://127.0.0.1:8000/healthz
 
 The image runs as the non-root `app` user.
 
+Public deployments must set `RUMINATE_ALLOWED_HOSTS` to the hostnames or IP addresses clients use in the HTTP `Host` header.
+
 ## Tools
 
 | Tool | Purpose |
@@ -98,6 +100,7 @@ The release Docker image builds the default feature set. Build with the Rust `re
 | Option | Default | Description |
 | --- | --- | --- |
 | `PORT` | `8000` | Container listen port. Publish it with `-p HOST_PORT:PORT`. |
+| `RUMINATE_ALLOWED_HOSTS` | `localhost,127.0.0.1,::1` | Additional comma-separated hostnames or `host:port` authorities accepted by RMCP's Host guard. Set this for public Docker deployments. |
 | `/mcp` | n/a | Streamable HTTP MCP endpoint. |
 | `/healthz` | n/a | Health endpoint returning service status. |
 
@@ -134,7 +137,6 @@ cargo run -p ruminate
 
 This repository includes `.forgejo/workflows/docker.yml` and `VERSION`.
 
-On each push, the workflow builds and pushes `git.phrk.org/mcp-servers/ruminate:<VERSION>` and `:latest`, then increments `VERSION` by `0.0.1` after a successful push.
+On each push to `main`, the workflow builds and pushes `git.phrk.org/mcp-servers/ruminate:<VERSION>` and `:latest`, then increments `VERSION` by `0.0.1` after a successful push.
 
 Forgejo registry secrets `REGISTRY_USER` and `REGISTRY_PASSWORD` are optional when the Forgejo-provided `GITHUB_TOKEN` can publish packages. The runner uses `git.phrk.org/mcp-servers/runner-image-docker-cli:latest`, which includes the Docker CLI.
-

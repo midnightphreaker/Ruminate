@@ -16,9 +16,9 @@ impl ReflectConfig {
     pub fn from_env() -> Self {
         Self {
             enabled: env_bool("RUMINATE_LLM_ENABLED", false),
-            base_url: std::env::var("RUMINATE_LLM_BASE_URL").ok(),
-            api_key_present: std::env::var("RUMINATE_LLM_API_KEY").ok().is_some(),
-            model: std::env::var("RUMINATE_LLM_MODEL").ok(),
+            base_url: env_value("RUMINATE_LLM_BASE_URL"),
+            api_key_present: env_value("RUMINATE_LLM_API_KEY").is_some(),
+            model: env_value("RUMINATE_LLM_MODEL"),
             timeout_ms: std::env::var("RUMINATE_LLM_TIMEOUT_MS")
                 .ok()
                 .and_then(|value| value.parse().ok())
@@ -54,6 +54,11 @@ pub async fn reflect(input: ReflectInput) -> Value {
         });
     }
 
+    reflect_configured(input, config).await
+}
+
+#[cfg(feature = "reflect")]
+async fn reflect_configured(input: ReflectInput, config: ReflectConfig) -> Value {
     if config.base_url.is_none() || !config.api_key_present || config.model.is_none() {
         return json!({
             "advisory": true,
@@ -65,6 +70,11 @@ pub async fn reflect(input: ReflectInput) -> Value {
         });
     }
 
+    reflect_enabled(input, config).await
+}
+
+#[cfg(not(feature = "reflect"))]
+async fn reflect_configured(input: ReflectInput, config: ReflectConfig) -> Value {
     reflect_enabled(input, config).await
 }
 
@@ -89,7 +99,7 @@ async fn reflect_enabled(input: ReflectInput, config: ReflectConfig) -> Value {
     };
 
     let base_url = config.base_url.expect("checked above");
-    let api_key = std::env::var("RUMINATE_LLM_API_KEY").expect("checked above");
+    let api_key = env_value("RUMINATE_LLM_API_KEY").expect("checked above");
     let model = config.model.expect("checked above");
     let prompt = format!("Purpose: {:?}\n\nInput:\n{}", input.purpose, input.input);
 
@@ -173,6 +183,13 @@ fn env_bool(name: &str, default: bool) -> bool {
         .unwrap_or(default)
 }
 
+fn env_value(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::OnceLock;
@@ -221,6 +238,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "reflect")]
     async fn reflect_reports_missing_config() {
         let _guard = env_lock().await;
         unsafe {
@@ -236,6 +254,55 @@ mod tests {
         })
         .await;
         assert_eq!(output["status"], "missing_config");
+        unsafe {
+            std::env::remove_var("RUMINATE_LLM_ENABLED");
+        }
+    }
+
+    #[tokio::test]
+    async fn reflect_rejects_empty_config_values() {
+        let _guard = env_lock().await;
+        unsafe {
+            std::env::set_var("RUMINATE_LLM_ENABLED", "true");
+            std::env::set_var("RUMINATE_LLM_BASE_URL", " ");
+            std::env::set_var("RUMINATE_LLM_API_KEY", "");
+            std::env::set_var("RUMINATE_LLM_MODEL", "\t");
+            std::env::remove_var("RUMINATE_LLM_MAX_INPUT_CHARS");
+        }
+        let output = reflect(ReflectInput {
+            purpose: ReflectPurpose::Handoff,
+            input: "state".to_string(),
+        })
+        .await;
+        #[cfg(feature = "reflect")]
+        assert_eq!(output["status"], "missing_config");
+        #[cfg(not(feature = "reflect"))]
+        assert_eq!(output["status"], "feature_disabled");
+        unsafe {
+            std::env::remove_var("RUMINATE_LLM_ENABLED");
+            std::env::remove_var("RUMINATE_LLM_BASE_URL");
+            std::env::remove_var("RUMINATE_LLM_API_KEY");
+            std::env::remove_var("RUMINATE_LLM_MODEL");
+        }
+    }
+
+    #[cfg(not(feature = "reflect"))]
+    #[tokio::test]
+    async fn reflect_enabled_without_feature_reports_feature_disabled() {
+        let _guard = env_lock().await;
+        unsafe {
+            std::env::set_var("RUMINATE_LLM_ENABLED", "true");
+            std::env::remove_var("RUMINATE_LLM_MAX_INPUT_CHARS");
+            std::env::remove_var("RUMINATE_LLM_BASE_URL");
+            std::env::remove_var("RUMINATE_LLM_API_KEY");
+            std::env::remove_var("RUMINATE_LLM_MODEL");
+        }
+        let output = reflect(ReflectInput {
+            purpose: ReflectPurpose::Handoff,
+            input: "state".to_string(),
+        })
+        .await;
+        assert_eq!(output["status"], "feature_disabled");
         unsafe {
             std::env::remove_var("RUMINATE_LLM_ENABLED");
         }

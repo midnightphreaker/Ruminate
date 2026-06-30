@@ -1,9 +1,3 @@
-mod http;
-mod models;
-mod reflect;
-mod server;
-mod state;
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -13,5 +7,5 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    http::serve().await
+    ruminate::http::serve().await
 }

@@ -22,6 +22,7 @@ use crate::{
 };
 
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
+const JSON_MIME_TYPE: &str = "application/json";
 
 #[derive(Clone)]
 #[allow(dead_code)]
@@ -172,10 +173,14 @@ impl ServerHandler for RuminateServer {
     ) -> Result<ListResourcesResult, McpError> {
         Ok(ListResourcesResult {
             resources: vec![
-                Resource::new("ruminate://session/timeline", "Timeline".to_string()),
-                Resource::new("ruminate://session/notes", "Notes".to_string()),
-                Resource::new("ruminate://session/checkpoints", "Checkpoints".to_string()),
-                Resource::new("ruminate://session/gates", "Gates".to_string()),
+                Resource::new("ruminate://session/timeline", "Timeline".to_string())
+                    .with_mime_type(JSON_MIME_TYPE),
+                Resource::new("ruminate://session/notes", "Notes".to_string())
+                    .with_mime_type(JSON_MIME_TYPE),
+                Resource::new("ruminate://session/checkpoints", "Checkpoints".to_string())
+                    .with_mime_type(JSON_MIME_TYPE),
+                Resource::new("ruminate://session/gates", "Gates".to_string())
+                    .with_mime_type(JSON_MIME_TYPE),
             ],
             next_cursor: None,
             meta: None,
@@ -201,10 +206,9 @@ impl ServerHandler for RuminateServer {
             }
         };
 
-        Ok(ReadResourceResult::new(vec![ResourceContents::text(
-            text,
-            request.uri,
-        )]))
+        Ok(ReadResourceResult::new(vec![
+            ResourceContents::text(text, request.uri).with_mime_type(JSON_MIME_TYPE),
+        ]))
     }
 
     async fn list_resource_templates(
