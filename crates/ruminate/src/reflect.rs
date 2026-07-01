@@ -1,0 +1,435 @@
+use serde_json::{Value, json};
+
+use crate::models::ReflectInput;
+
+#[derive(Debug, Clone)]
+pub struct ReflectConfig {
+    pub enabled: bool,
+    pub base_url: Option<String>,
+    pub api_key_present: bool,
+    pub model: Option<String>,
+    pub timeout_ms: u64,
+    pub max_input_chars: usize,
+}
+
+impl ReflectConfig {
+    pub fn from_env() -> Self {
+        Self {
+            enabled: env_bool("RUMINATE_LLM_ENABLED", false),
+            base_url: env_value("RUMINATE_LLM_BASE_URL"),
+            api_key_present: env_value("RUMINATE_LLM_API_KEY").is_some(),
+            model: env_value("RUMINATE_LLM_MODEL"),
+            timeout_ms: std::env::var("RUMINATE_LLM_TIMEOUT_MS")
+                .ok()
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(30_000),
+            max_input_chars: std::env::var("RUMINATE_LLM_MAX_INPUT_CHARS")
+                .ok()
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(20_000),
+        }
+    }
+}
+
+pub async fn reflect(input: ReflectInput) -> Value {
+    let config = ReflectConfig::from_env();
+    if input.input.chars().count() > config.max_input_chars {
+        return json!({
+            "advisory": true,
+            "enabled": config.enabled,
+            "status": "rejected",
+            "error": "input exceeds RUMINATE_LLM_MAX_INPUT_CHARS",
+            "model": config.model,
+            "timeoutMs": config.timeout_ms,
+        });
+    }
+
+    if !config.enabled {
+        return json!({
+            "advisory": true,
+            "enabled": false,
+            "status": "disabled",
+            "purpose": input.purpose,
+            "model": config.model,
+        });
+    }
+
+    reflect_configured(input, config).await
+}
+
+#[cfg(feature = "reflect")]
+async fn reflect_configured(input: ReflectInput, config: ReflectConfig) -> Value {
+    if config.base_url.is_none() || !config.api_key_present || config.model.is_none() {
+        return json!({
+            "advisory": true,
+            "enabled": true,
+            "status": "missing_config",
+            "purpose": input.purpose,
+            "model": config.model,
+            "required": ["RUMINATE_LLM_BASE_URL", "RUMINATE_LLM_API_KEY", "RUMINATE_LLM_MODEL"],
+        });
+    }
+
+    reflect_enabled(input, config).await
+}
+
+#[cfg(not(feature = "reflect"))]
+async fn reflect_configured(input: ReflectInput, config: ReflectConfig) -> Value {
+    reflect_enabled(input, config).await
+}
+
+#[cfg(feature = "reflect")]
+async fn reflect_enabled(input: ReflectInput, config: ReflectConfig) -> Value {
+    use std::time::Duration;
+
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_millis(config.timeout_ms))
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => {
+            return json!({
+                "advisory": true,
+                "enabled": true,
+                "status": "client_error",
+                "error": error.to_string(),
+                "model": config.model,
+            });
+        }
+    };
+
+    let base_url = config.base_url.expect("checked above");
+    let api_key = env_value("RUMINATE_LLM_API_KEY").expect("checked above");
+    let model = config.model.expect("checked above");
+    let prompt = format!("Purpose: {:?}\n\nInput:\n{}", input.purpose, input.input);
+
+    let response = client
+        .post(base_url.trim_end_matches('/').to_string() + "/chat/completions")
+        .bearer_auth(api_key)
+        .json(&json!({
+            "model": model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are an advisory reflection helper for a local MCP workflow tool. Be concise."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        }))
+        .send()
+        .await;
+
+    match response {
+        Ok(response) if response.status().is_success() => {
+            let status = response.status().as_u16();
+            match response.json::<Value>().await {
+                Ok(body) => json!({
+                    "advisory": true,
+                    "enabled": true,
+                    "status": "ok",
+                    "model": model,
+                    "providerStatus": status,
+                    "response": body,
+                }),
+                Err(error) => json!({
+                    "advisory": true,
+                    "enabled": true,
+                    "status": "parse_error",
+                    "model": model,
+                    "error": error.to_string(),
+                }),
+            }
+        }
+        Ok(response) => json!({
+            "advisory": true,
+            "enabled": true,
+            "status": "provider_error",
+            "model": model,
+            "providerStatus": response.status().as_u16(),
+        }),
+        Err(error) if error.is_timeout() => json!({
+            "advisory": true,
+            "enabled": true,
+            "status": "timeout",
+            "model": model,
+        }),
+        Err(error) => json!({
+            "advisory": true,
+            "enabled": true,
+            "status": "request_error",
+            "model": model,
+            "error": error.to_string(),
+        }),
+    }
+}
+
+#[cfg(not(feature = "reflect"))]
+async fn reflect_enabled(_input: ReflectInput, config: ReflectConfig) -> Value {
+    json!({
+        "advisory": true,
+        "enabled": true,
+        "status": "feature_disabled",
+        "model": config.model,
+    })
+}
+
+fn env_bool(name: &str, default: bool) -> bool {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.eq_ignore_ascii_case("true"))
+        .unwrap_or(default)
+}
+
+fn env_value(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::OnceLock;
+    use tokio::sync::{Mutex, MutexGuard};
+
+    use crate::models::ReflectPurpose;
+
+    use super::*;
+
+    async fn env_lock() -> MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(())).lock().await
+    }
+
+    #[tokio::test]
+    async fn reflect_disabled_by_default() {
+        let _guard = env_lock().await;
+        unsafe {
+            std::env::remove_var("RUMINATE_LLM_ENABLED");
+            std::env::remove_var("RUMINATE_LLM_MAX_INPUT_CHARS");
+        }
+        let output = reflect(ReflectInput {
+            purpose: ReflectPurpose::Summarize,
+            input: "hello".to_string(),
+        })
+        .await;
+        assert_eq!(output["status"], "disabled");
+        assert_eq!(output["advisory"], true);
+    }
+
+    #[tokio::test]
+    async fn reflect_rejects_large_input() {
+        let _guard = env_lock().await;
+        unsafe {
+            std::env::set_var("RUMINATE_LLM_MAX_INPUT_CHARS", "3");
+        }
+        let output = reflect(ReflectInput {
+            purpose: ReflectPurpose::Summarize,
+            input: "hello".to_string(),
+        })
+        .await;
+        assert_eq!(output["status"], "rejected");
+        unsafe {
+            std::env::remove_var("RUMINATE_LLM_MAX_INPUT_CHARS");
+        }
+    }
+
+    #[tokio::test]
+    #[cfg(feature = "reflect")]
+    async fn reflect_reports_missing_config() {
+        let _guard = env_lock().await;
+        unsafe {
+            std::env::set_var("RUMINATE_LLM_ENABLED", "true");
+            std::env::remove_var("RUMINATE_LLM_MAX_INPUT_CHARS");
+            std::env::remove_var("RUMINATE_LLM_BASE_URL");
+            std::env::remove_var("RUMINATE_LLM_API_KEY");
+            std::env::remove_var("RUMINATE_LLM_MODEL");
+        }
+        let output = reflect(ReflectInput {
+            purpose: ReflectPurpose::Handoff,
+            input: "state".to_string(),
+        })
+        .await;
+        assert_eq!(output["status"], "missing_config");
+        unsafe {
+            std::env::remove_var("RUMINATE_LLM_ENABLED");
+        }
+    }
+
+    #[tokio::test]
+    async fn reflect_rejects_empty_config_values() {
+        let _guard = env_lock().await;
+        unsafe {
+            std::env::set_var("RUMINATE_LLM_ENABLED", "true");
+            std::env::set_var("RUMINATE_LLM_BASE_URL", " ");
+            std::env::set_var("RUMINATE_LLM_API_KEY", "");
+            std::env::set_var("RUMINATE_LLM_MODEL", "\t");
+            std::env::remove_var("RUMINATE_LLM_MAX_INPUT_CHARS");
+        }
+        let output = reflect(ReflectInput {
+            purpose: ReflectPurpose::Handoff,
+            input: "state".to_string(),
+        })
+        .await;
+        #[cfg(feature = "reflect")]
+        assert_eq!(output["status"], "missing_config");
+        #[cfg(not(feature = "reflect"))]
+        assert_eq!(output["status"], "feature_disabled");
+        unsafe {
+            std::env::remove_var("RUMINATE_LLM_ENABLED");
+            std::env::remove_var("RUMINATE_LLM_BASE_URL");
+            std::env::remove_var("RUMINATE_LLM_API_KEY");
+            std::env::remove_var("RUMINATE_LLM_MODEL");
+        }
+    }
+
+    #[cfg(not(feature = "reflect"))]
+    #[tokio::test]
+    async fn reflect_enabled_without_feature_reports_feature_disabled() {
+        let _guard = env_lock().await;
+        unsafe {
+            std::env::set_var("RUMINATE_LLM_ENABLED", "true");
+            std::env::remove_var("RUMINATE_LLM_MAX_INPUT_CHARS");
+            std::env::remove_var("RUMINATE_LLM_BASE_URL");
+            std::env::remove_var("RUMINATE_LLM_API_KEY");
+            std::env::remove_var("RUMINATE_LLM_MODEL");
+        }
+        let output = reflect(ReflectInput {
+            purpose: ReflectPurpose::Handoff,
+            input: "state".to_string(),
+        })
+        .await;
+        assert_eq!(output["status"], "feature_disabled");
+        unsafe {
+            std::env::remove_var("RUMINATE_LLM_ENABLED");
+        }
+    }
+
+    #[cfg(feature = "reflect")]
+    async fn mock_provider(router: axum::Router) -> (String, tokio::task::JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handle = tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+        (format!("http://{addr}"), handle)
+    }
+
+    #[cfg(feature = "reflect")]
+    fn configure_reflect(base_url: &str, timeout_ms: &str) {
+        unsafe {
+            std::env::set_var("RUMINATE_LLM_ENABLED", "true");
+            std::env::set_var("RUMINATE_LLM_BASE_URL", base_url);
+            std::env::set_var("RUMINATE_LLM_API_KEY", "test-key");
+            std::env::set_var("RUMINATE_LLM_MODEL", "test-model");
+            std::env::set_var("RUMINATE_LLM_TIMEOUT_MS", timeout_ms);
+            std::env::remove_var("RUMINATE_LLM_MAX_INPUT_CHARS");
+        }
+    }
+
+    #[cfg(feature = "reflect")]
+    fn clear_reflect_env() {
+        unsafe {
+            std::env::remove_var("RUMINATE_LLM_ENABLED");
+            std::env::remove_var("RUMINATE_LLM_BASE_URL");
+            std::env::remove_var("RUMINATE_LLM_API_KEY");
+            std::env::remove_var("RUMINATE_LLM_MODEL");
+            std::env::remove_var("RUMINATE_LLM_TIMEOUT_MS");
+            std::env::remove_var("RUMINATE_LLM_MAX_INPUT_CHARS");
+        }
+    }
+
+    #[cfg(feature = "reflect")]
+    #[tokio::test]
+    async fn reflect_mocked_success() {
+        use axum::{Json, routing::post};
+        use serde_json::json;
+
+        let _guard = env_lock().await;
+        let (base_url, handle) = mock_provider(axum::Router::new().route(
+            "/chat/completions",
+            post(|| async {
+                Json(json!({
+                    "choices": [{
+                        "message": {
+                            "role": "assistant",
+                            "content": "summary"
+                        }
+                    }]
+                }))
+            }),
+        ))
+        .await;
+        configure_reflect(&base_url, "30000");
+
+        let output = reflect(ReflectInput {
+            purpose: ReflectPurpose::Summarize,
+            input: "summarize this".to_string(),
+        })
+        .await;
+
+        assert_eq!(output["status"], "ok");
+        assert_eq!(output["advisory"], true);
+        assert_eq!(output["model"], "test-model");
+        clear_reflect_env();
+        handle.abort();
+    }
+
+    #[cfg(feature = "reflect")]
+    #[tokio::test]
+    async fn reflect_mocked_timeout() {
+        use axum::routing::post;
+        use tokio::time::{Duration, sleep};
+
+        let _guard = env_lock().await;
+        let (base_url, handle) = mock_provider(axum::Router::new().route(
+            "/chat/completions",
+            post(|| async {
+                sleep(Duration::from_millis(200)).await;
+                "slow"
+            }),
+        ))
+        .await;
+        configure_reflect(&base_url, "10");
+
+        let output = reflect(ReflectInput {
+            purpose: ReflectPurpose::Critique,
+            input: "critique this".to_string(),
+        })
+        .await;
+
+        assert_eq!(output["status"], "timeout");
+        assert_eq!(output["advisory"], true);
+        clear_reflect_env();
+        handle.abort();
+    }
+
+    #[cfg(feature = "reflect")]
+    #[tokio::test]
+    async fn reflect_mocked_provider_error() {
+        use axum::{http::StatusCode, routing::post};
+
+        let _guard = env_lock().await;
+        let (base_url, handle) = mock_provider(axum::Router::new().route(
+            "/chat/completions",
+            post(|| async { StatusCode::INTERNAL_SERVER_ERROR }),
+        ))
+        .await;
+        configure_reflect(&base_url, "30000");
+
+        let output = reflect(ReflectInput {
+            purpose: ReflectPurpose::Compare,
+            input: "compare this".to_string(),
+        })
+        .await;
+
+        assert_eq!(output["status"], "provider_error");
+        assert_eq!(output["providerStatus"], 500);
+        assert_eq!(output["advisory"], true);
+        clear_reflect_env();
+        handle.abort();
+    }
+}
