@@ -4,18 +4,20 @@ Ruminate is a Rust Streamable HTTP MCP server for session-local reflective workf
 
 The server stores workflow data in memory through the MCP session manager. It does not persist timeline entries, notes, checkpoints, gates, prompts, completions, or credentials.
 
-Repository: `https://git.phrk.org/mcp-servers/ruminate`
-Docker image: `git.phrk.org/mcp-servers/ruminate:latest`
+Repository: [repository root](.)
+Docker image repository: `${RUMINATE_IMAGE_REPOSITORY}`
 
 ## Quickstart
 
-Run the released container:
+Set the image repository for your registry namespace, then run the released container:
 
 ```bash
+export RUMINATE_IMAGE_REPOSITORY="<registry-host>/mcp-servers/ruminate"
+
 docker run --rm \
   --name ruminate \
   -p 8000:8000 \
-  git.phrk.org/mcp-servers/ruminate:latest
+  "${RUMINATE_IMAGE_REPOSITORY}:latest"
 ```
 
 Check the health endpoint:
@@ -160,17 +162,14 @@ Evaluation scenarios for MCP Inspector or another MCP client live in `evals/rumi
 7. List prompts and fetch each static prompt.
 8. Open a second client session and confirm its summary starts empty.
 
-## Release And Deployment Signals
+## Image Publishing
 
-The repository includes a Dockerfile and a Forgejo workflow at `.forgejo/workflows/docker.yml`.
+This repository does not currently include a tracked image-publishing workflow. A local or external workflow can use the same runtime variable to form versioned and latest image references:
 
-On pushes to `main`, the workflow builds and pushes:
+```bash
+export RUMINATE_IMAGE_REPOSITORY="<registry-host>/mcp-servers/ruminate"
 
-```text
-git.phrk.org/mcp-servers/ruminate:<VERSION>
-git.phrk.org/mcp-servers/ruminate:latest
+printf '%s\n' \
+  "${RUMINATE_IMAGE_REPOSITORY}:<VERSION>" \
+  "${RUMINATE_IMAGE_REPOSITORY}:latest"
 ```
-
-`VERSION` is validated as `X.Y.Z` before the image build. After a successful push, the workflow increments the patch version and commits the updated `VERSION` file with `[skip ci]`.
-
-The workflow can authenticate to `git.phrk.org` with `REGISTRY_USER` and `REGISTRY_PASSWORD` secrets, or with the Forgejo-provided token when package publishing is enabled for the runner.
