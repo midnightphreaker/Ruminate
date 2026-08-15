@@ -4,20 +4,18 @@ Ruminate is a Rust Streamable HTTP MCP server for session-local reflective workf
 
 The server stores workflow data in memory through the MCP session manager. It does not persist timeline entries, notes, checkpoints, gates, prompts, completions, or credentials.
 
-Repository: [repository root](.)
-Docker image repository: `${RUMINATE_IMAGE_REPOSITORY}`
+Repository: `https://github.com/midnightphreaker/Ruminate`
+Docker image: `git.phrk.org/mcp-servers/ruminate:latest`
 
 ## Quickstart
 
-Set the image repository for your registry namespace, then run the released container:
+Run the released container:
 
 ```bash
-export RUMINATE_IMAGE_REPOSITORY="<registry-host>/mcp-servers/ruminate"
-
 docker run --rm \
   --name ruminate \
   -p 8000:8000 \
-  "${RUMINATE_IMAGE_REPOSITORY}:latest"
+  git.phrk.org/mcp-servers/ruminate:latest
 ```
 
 Check the health endpoint:
@@ -43,6 +41,33 @@ For local source development, run the crate directly:
 ```bash
 cargo run -p ruminate
 ```
+
+## Stdio
+
+Select stdio explicitly when an MCP client launches the server as a local process. It uses stdin and stdout for MCP messages and opens no HTTP port:
+
+```bash
+cargo build --release -p ruminate
+RUMINATE_TRANSPORT=stdio ./target/release/ruminate
+```
+
+Register the absolute release binary with Codex:
+
+```bash
+codex mcp add ruminate \
+  --env RUMINATE_TRANSPORT=stdio \
+  -- /absolute/path/to/Ruminate/target/release/ruminate
+```
+
+For a containerized stdio server, keep the container interactive and set the same transport selector:
+
+```bash
+docker run --rm -i \
+  -e RUMINATE_TRANSPORT=stdio \
+  git.phrk.org/mcp-servers/ruminate:latest
+```
+
+Stdio state is session-local and in memory: records are available only while that launched server process remains connected, and are discarded when it exits. Leave `RUMINATE_TRANSPORT` unset to retain the Streamable HTTP/Docker default.
 
 ## What The Server Provides
 
@@ -162,14 +187,17 @@ Evaluation scenarios for MCP Inspector or another MCP client live in `evals/rumi
 7. List prompts and fetch each static prompt.
 8. Open a second client session and confirm its summary starts empty.
 
-## Image Publishing
+## Release And Deployment Signals
 
-This repository does not currently include a tracked image-publishing workflow. A local or external workflow can use the same runtime variable to form versioned and latest image references:
+The repository includes a Dockerfile and a Forgejo workflow at `.forgejo/workflows/docker.yml`.
 
-```bash
-export RUMINATE_IMAGE_REPOSITORY="<registry-host>/mcp-servers/ruminate"
+On pushes to `main`, the workflow builds and pushes:
 
-printf '%s\n' \
-  "${RUMINATE_IMAGE_REPOSITORY}:<VERSION>" \
-  "${RUMINATE_IMAGE_REPOSITORY}:latest"
+```text
+git.phrk.org/mcp-servers/ruminate:<VERSION>
+git.phrk.org/mcp-servers/ruminate:latest
 ```
+
+`VERSION` is validated as `X.Y.Z` before the image build. After a successful push, the workflow increments the patch version and commits the updated `VERSION` file with `[skip ci]`.
+
+The workflow can authenticate to `git.phrk.org` with `REGISTRY_USER` and `REGISTRY_PASSWORD` secrets, or with the Forgejo-provided token when package publishing is enabled for the runner.

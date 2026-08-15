@@ -134,14 +134,14 @@ mod tests {
             "localhost",
             "127.0.0.1",
             "::1",
-            "192.168.0.2",
-            "192.168.0.2:8000",
+            "10.0.0.2",
+            "10.0.0.2:8000",
         ]))
         .oneshot(
             axum::http::Request::builder()
                 .method("POST")
                 .uri("/mcp")
-                .header("host", "192.168.0.2:8000")
+                .header("host", "10.0.0.2:8000")
                 .header("content-type", "application/json")
                 .body(Body::from("{}"))
                 .unwrap(),
