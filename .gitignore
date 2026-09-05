@@ -5,3 +5,7 @@ target/
 .env
 .env.*
 !.env.example
+/.release-dist/
+/.release-venv/
+/.release-state/
+/.codex/

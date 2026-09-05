@@ -1,9 +1,9 @@
-FROM rust:1.95-bookworm AS build
+FROM rust:1.97.1-bookworm AS build
 
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
-RUN cargo build --release -p ruminate
+RUN cargo build --release --locked --all-features -p ruminate
 
 FROM debian:bookworm-slim
 

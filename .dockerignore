@@ -4,4 +4,7 @@ coverage/
 dist/
 node_modules/
 target/
-
+/.release-dist/
+/.release-venv/
+/.release-state/
+/.codex/

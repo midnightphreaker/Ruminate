@@ -4,8 +4,8 @@ Ruminate is a Rust Streamable HTTP MCP server for session-local reflective workf
 
 The server stores workflow data in memory through the MCP session manager. It does not persist timeline entries, notes, checkpoints, gates, prompts, completions, or credentials.
 
-Repository: `https://github.com/midnightphreaker/Ruminate`
-Docker image: `git.phrk.org/mcp-servers/ruminate:latest`
+Repository: `https://git.phrk.org/pub/Ruminate`
+Docker image: `git.phrk.org/pub/ruminate:latest`
 
 ## Quickstart
 
@@ -15,7 +15,7 @@ Run the released container:
 docker run --rm \
   --name ruminate \
   -p 8000:8000 \
-  git.phrk.org/mcp-servers/ruminate:latest
+  git.phrk.org/pub/ruminate:latest
 ```
 
 Check the health endpoint:
@@ -64,7 +64,7 @@ For a containerized stdio server, keep the container interactive and set the sam
 ```bash
 docker run --rm -i \
   -e RUMINATE_TRANSPORT=stdio \
-  git.phrk.org/mcp-servers/ruminate:latest
+  git.phrk.org/pub/ruminate:latest
 ```
 
 Stdio state is session-local and in memory: records are available only while that launched server process remains connected, and are discarded when it exits. Leave `RUMINATE_TRANSPORT` unset to retain the Streamable HTTP/Docker default.
@@ -187,17 +187,14 @@ Evaluation scenarios for MCP Inspector or another MCP client live in `evals/rumi
 7. List prompts and fetch each static prompt.
 8. Open a second client session and confirm its summary starts empty.
 
-## Release And Deployment Signals
+## Automated Forgejo releases
 
-The repository includes a Dockerfile and a Forgejo workflow at `.forgejo/workflows/docker.yml`.
+The [Release action](https://git.phrk.org/pub/Ruminate/actions) checks and builds Linux AMD64 and Windows x86_64 archives plus a Linux container. It runs on the `linux-amd64` Forgejo runners. Archive names are `Ruminate.vVERSION-linux-amd64.tar.gz` (and `Ruminate.vVERSION-windows-x86_64.zip` when supported).
 
-On pushes to `main`, the workflow builds and pushes:
+Run the workflow manually with **Major** to increment the middle version component and reset the last (`0.1.7` → `0.2.0`), **minor** to increment the last (`0.1.7` → `0.1.8`), or **retry** to publish the current version without another bump. Use **retry** for the initial release or to resume a failed publication. Rerunning the original failed job also retains its version.
 
-```text
-git.phrk.org/mcp-servers/ruminate:<VERSION>
-git.phrk.org/mcp-servers/ruminate:latest
-```
+A default-branch push releases only when an application version changes. Change `VERSION`; the workflow synchronizes the configured application manifests and lockfile entries. Ordinary source/documentation pushes do not release. Checks and all builds finish before the workflow commits version changes. Release notes include up to ten commit subjects since the preceding release.
 
-`VERSION` is validated as `X.Y.Z` before the image build. After a successful push, the workflow increments the patch version and commits the updated `VERSION` file with `[skip ci]`.
+Downloads appear on the [releases page](https://git.phrk.org/pub/Ruminate/releases). Container tags are `git.phrk.org/pub/ruminate:vVERSION` and `git.phrk.org/pub/ruminate:latest`; `latest` changes only after the required release artifacts have uploaded. Container repository names use lowercase as required by the registry.
 
-The workflow can authenticate to `git.phrk.org` with `REGISTRY_USER` and `REGISTRY_PASSWORD` secrets, or with the Forgejo-provided token when package publishing is enabled for the runner.
+The repository requires Actions secrets `RELEASE_TOKEN` (repository/release/package write access) and `RELEASE_USER` (its account name). Keep values in the secret store. The runner's existing Podman socket must be available at `/var/run/docker.sock`; the workflow uses its remote API. Build commands, version fields, and required output filenames are declared in `.forgejo/release.json`.
